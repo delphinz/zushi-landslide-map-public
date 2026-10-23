@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>逗子市 急傾斜地（崖崩れ）リスク解析マップ</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Meiryo", sans-serif; background: #0f172a; color: #f8fafc; display: flex; height: 100vh; overflow: hidden; }
+  #sidebar-left { width: 405px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; overflow-y: auto; padding: 0 12px 12px 12px; gap: 11px; z-index: 1000; }
+  #sidebar-header { position: sticky; top: 0; background: #1e293b; padding: 12px 0 9px 0; border-bottom: 1px solid #334155; z-index: 20; flex-shrink: 0; }
+  #map-container { flex: 1; position: relative; }
+  #map { width: 100%; height: 100%; cursor: crosshair; }
+  #sidebar-right { width: 430px; background: #1e293b; border-left: 1px solid #334155; display: flex; flex-direction: column; overflow-y: auto; padding: 12px; gap: 11px; z-index: 1000; }
+  .card { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 10px; }
+  .card h2 { font-size: 12.5px; color: #38bdf8; margin-bottom: 7px; display: flex; align-items: center; justify-content: space-between; }
+  .badge { background: #dc2626; color: #fff; font-size: 10px; padding: 2px 7px; border-radius: 999px; font-weight: bold; }
+  .badge-blue { background: #2563eb; }
+  .badge-amber { background: #d97706; }
+  .badge-purple { background: #9333ea; }
+  select, input[type="range"] { width: 100%; padding: 6px; border-radius: 6px; background: #1e293b; color: #f8fafc; border: 1px solid #475569; font-size: 12px; }
+  .layer-item { display: flex; align-items: center; justify-content: space-between; font-size: 11px; padding: 3px 0; border-bottom: 1px solid #1e293b; }
+  .layer-item label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .kpi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 8px; }
+  .kpi { background: #1e293b; padding: 7px; border-radius: 6px; border-left: 3px solid #ef4444; }
+  .kpi.cyan { border-left-color: #00f5d4; }
+  .kpi .label { font-size: 9.5px; color: #94a3b8; }
+  .kpi .val { font-size: 13.5px; font-weight: bold; color: #f8fafc; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+  th, td { padding: 4px 3.5px; text-align: left; border-bottom: 1px solid #334155; }
+  th { color: #94a3b8; font-weight: 600; }
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; transition: color 0.15s; }
+  th.sortable:hover { color: #e2e8f0; }
+  th.sortable.active { color: #38bdf8; }
+  tr:hover { background: #1e293b; cursor: pointer; }
+  .rank-S { color: #f87171; font-weight: bold; }
+  .rank-A { color: #fb923c; font-weight: bold; }
+  .rank-B { color: #38bdf8; font-weight: bold; }
+  @media (max-width: 1024px) {
+    body { flex-direction: column; height: auto; min-height: 100vh; overflow-y: auto; overflow-x: hidden; }
+    #map-container { width: 100%; height: 60vh; min-height: 360px; flex: none; order: -1; }
+    #map { width: 100%; height: 100%; min-height: 360px; }
+    #sidebar-left, #sidebar-right { width: 100%; border-right: none; border-left: none; border-top: 1px solid #334155; overflow-y: visible; }
+    #layer-tooltip { max-width: calc(100vw - 24px); }
+  }
+  .chart-box { height: 150px; position: relative; }
+  .hist-item { padding: 6px; border-bottom: 1px solid #1e293b; cursor: pointer; border-radius: 6px; transition: background 0.15s; }
+  .hist-item:hover { background: #1e293b; }
+  .hist-title { font-size: 11px; font-weight: bold; color: #fde047; }
+  .hist-meta { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+  .layer-item:hover { background: #1e293b; border-radius: 4px; }
+  .info-icon { font-size: 10px; color: #38bdf8; background: #1e293b; border: 1px solid #334155; border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+  #layer-tooltip {
+    position: fixed;
+    display: none;
+    width: 340px;
+    background: rgba(15, 23, 42, 0.97);
+    border: 1px solid #38bdf8;
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: #f8fafc;
+    font-size: 11.5px;
+    line-height: 1.5;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.65);
+    z-index: 9999;
+    pointer-events: none;
+  }
+  #layer-tooltip .tt-title { font-size: 12.5px; font-weight: bold; color: #fde047; margin-bottom: 5px; }
+  #layer-tooltip .tt-badge { display: inline-block; font-size: 10px; font-weight: bold; padding: 1.5px 7px; border-radius: 999px; margin-bottom: 6px; }
+  #layer-tooltip .tt-meta { font-size: 10.5px; color: #94a3b8; margin-bottom: 5px; border-bottom: 1px solid #334155; padding-bottom: 4px; }
+  #layer-tooltip .tt-desc { font-size: 11px; color: #e2e8f0; }
+</style>
+</head>
+<body>
+<div id="layer-tooltip"></div>
+
+<div id="sidebar-left">
+  <div id="sidebar-header">
+    <h1 style="font-size:15px; font-weight:bold; color:#f8fafc;">逗子市 急傾斜地リスク解析マップ</h1>
+    <p style="font-size:10px; color:#94a3b8; margin-top:2px;">5m航空レーザDEM・産総研地質図・衛星SAR統合 機械学習モデル</p>
+    <div style="margin-top:8px; padding:8px; border-left:3px solid #fbbf24; border-radius:4px; background:#0f172a; font-size:11px; line-height:1.6; color:#e2e8f0;">
+      <strong style="color:#fde047;">試行版｜現地確認候補を探すための技術検証マップ</strong><br/>
+      表示値は相対的な評価スコアであり、崩壊確率や安全性を示すものではありません。低スコア・色のない場所でも、災害が発生する可能性があります。避難判断には自治体・気象庁の最新の公式情報をご確認ください。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>① 調査対象地区クイックジャンプ <span class="badge badge-blue">全8地区</span></h2>
+    <select id="district-select">
+      <option value="all">全域（逗子市全体）</option>
+    </select>
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="label">空間独立 ROC-AUC</div>
+        <div class="val" id="kpi-auc">-</div>
+      </div>
+      <div class="kpi">
+        <div class="label">スコア70以上面積</div>
+        <div class="val" id="kpi-area">-</div>
+      </div>
+      <div class="kpi cyan">
+        <div class="label">区域外の高リスク崖</div>
+        <div class="val" id="kpi-hidden">-</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>② 解析レイヤー切替 <span class="badge badge-purple">全16レイヤー</span></h2>
+    <div id="layer-controls" style="max-height: 235px; overflow-y: auto;"></div>
+    <div style="margin-top:6px; font-size:11px; color:#94a3b8;">
+      リスクスコア不透明度: <span id="opacity-val">65%</span>
+      <input type="range" id="opacity-slider" min="0" max="100" value="65" />
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>💥 過去の実災害アーカイブ (広報ずし公式9事案) <span class="badge badge-amber">9事案</span></h2>
+    <div id="hist-list" style="max-height: 195px; overflow-y: auto;"></div>
+  </div>
+
+  <div class="card">
+    <h2>
+      <span>③ 全8地区 AIリスク・InSAR・区域外危険一覧</span>
+      <select id="district-sort-select" style="width:auto; padding:2px 6px; font-size:10.5px;">
+        <option value="id:asc">並び替え: 地区順</option>
+        <option value="area70:desc">警戒面積 (大きい順)</option>
+        <option value="hidden:desc">区域外危険 (大きい順)</option>
+        <option value="hist:desc">実災害件数 (多い順)</option>
+        <option value="insar:desc">InSAR最大 (高い順)</option>
+        <option value="rank:desc">判定ランク (S→B)</option>
+      </select>
+    </h2>
+    <div style="overflow-x:auto;">
+      <table id="district-table">
+        <thead>
+          <tr>
+            <th class="sortable active" data-sort="id">地区 <span class="sort-ind">▲</span></th>
+            <th class="sortable" data-sort="hist">実災害 <span class="sort-ind">↕</span></th>
+            <th class="sortable" data-sort="area70">警戒面積 <span class="sort-ind">↕</span></th>
+            <th class="sortable" data-sort="hidden">区域外危険 <span class="sort-ind">↕</span></th>
+            <th class="sortable" data-sort="insar">InSAR最大 <span class="sort-ind">↕</span></th>
+            <th class="sortable" data-sort="rank">判定 <span class="sort-ind">↕</span></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="map-container">
+  <div id="map"></div>
+</div>
+
+<div id="sidebar-right">
+  <div class="card">
+    <h2>📍 クリック地点 / 実災害現場の精密斜面カルテ <span class="badge" id="kartu-prob-badge">地図/事案をクリック</span></h2>
+    <div id="kartu-details" style="font-size:11px; line-height:1.52; color:#cbd5e1;">
+      左側の「💥 過去の実災害アーカイブ」または地図上の任意の崖をクリックすると、実災害の定量データ・産総研地層区分（逗子層/池子層）・InSAR多軌道変位指標・極微細曲率・AI診断を表示します。
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🛰️ NASA ASF Sentinel-1 SLC 干渉SAR観測メタデータ <span class="badge badge-purple">Cバンド + Lバンド</span></h2>
+    <div id="insar-slc-box" style="font-size:10.5px; color:#cbd5e1; line-height:1.45;"></div>
+  </div>
+
+  <div class="card">
+    <h2>📈 選択地区の植生(NDVI) & 水分(NDMI) 長期推移 (GEE)</h2>
+    <div class="chart-box"><canvas id="ts-chart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>📈 特徴量の寄与度 (Feature Importance)</h2>
+    <div class="chart-box"><canvas id="imp-chart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>🎯 AIモデル精度検証 ROC曲線 (Holdout Test)</h2>
+    <div class="chart-box"><canvas id="roc-chart"></canvas></div>
+  </div>
+
+  <div class="card" style="border-color:#475569; background:#0b1120;">
+    <h2 style="color:#fde047;">📜 出典・クレジット ＆ 免責事項 <span class="badge" style="background:#475569;">公開用表記</span></h2>
+    <div style="font-size:10px; line-height:1.5; color:#94a3b8;">
+      <div style="margin-bottom:5px;">
+        <b style="color:#e2e8f0;">【出典・利用データクレジット】</b><br/>
+        ・<b>地形・空中写真・住所逆引き</b>：国土地理院「基盤地図情報 数値標高モデル(5mメッシュ航空レーザDEM)」「地理院タイル（標準地図・全国最新写真シームレス）」「逆ジオコーダAPI」を加工して作成<br/>
+        ・<b>地質情報</b>：産業技術総合研究所 地質調査総合センター「20万分の1日本シームレス地質図V2」および「5万分の1地質図幅（横須賀・鎌倉）」（CC BY 4.0）を加工して作成<br/>
+        ・<b>法指定区域</b>：国土交通省 ハザードマップポータルサイト「重ねるハザードマップ（急傾斜地の崩壊 警戒区域・特別警戒区域）」を加工して作成<br/>
+        ・<b>衛星データ</b>：Google Earth Engine / Copernicus Sentinel-1 &amp; Sentinel-2 (ESA) / ALOS-2 PALSAR-2 (JAXA) / 干渉SAR SLCメタデータ (NASA ASF)<br/>
+        ・<b>既往災害記録</b>：逗子市公式広報誌「広報ずし 2021年11月号（No.957）特集：逗子市の崖」および国土交通省 国土技術政策総合研究所（国総研）調査報告資料を参照
+      </div>
+      <div style="border-top:1px solid #1e293b; padding-top:4px; color:#cbd5e1;">
+        <b style="color:#f87171;">【免責事項（Disclaimer）】</b><br/>
+        本マップは、公開データと機械学習を用いて現地確認候補を探すための、学術・技術検証用の試行版・相対リスク評価マップです。表示値（0〜100）は相対的な評価スコアであり、崩壊発生確率や安全性を示すものではありません。低スコア・色のない場所や警戒区域外でも、災害が発生する可能性があります。データの解像度、取得時期、欠損、位置誤差および解析上の近似により、実際の現地状況と異なる場合があります。地質境界には近似を含み、衛星SAR指標は地盤変位の実測値ではありません。モデルの実災害に対する検出性能は検証途上です。本マップは国・神奈川県・逗子市による公的な土砂災害警戒区域等の法定指定を示すものではなく、その指定・非指定を変更するものでもありません。避難判断には自治体・気象庁の最新の公式情報をご確認ください。建築・不動産取引等の法的確認には、神奈川県および逗子市の公式ハザードマップ・告示図書をご確認ください。
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script>
+const DATA = window.EXTERNAL_DASHBOARD_DATA;
+
+const FORMATION_NAMES = {
+  0: '海域/対象外',
+  1: '第四紀 完新統・沖積層 (谷底平野・低地)',
+  2: '三浦層群 池子層 (凝灰質火砕岩：無降雨時の乾湿・凍結剥離型)',
+  3: '三浦層群 逗子層 (泥岩・砂岩互層：乾湿スレーキング＆豪雨崩壊型)',
+  4: '⚠️ 池子層／逗子層 地層境界・断層破砕帯 (構造弱線・湧水集中帯)'
+};
+
+document.getElementById('kpi-auc').textContent = DATA.auc.toFixed(3);
+document.getElementById('kpi-area').textContent = DATA.globalAreaByThresh['70'].ha + ' ha';
+document.getElementById('kpi-hidden').textContent = DATA.totalHiddenHa + ' ha';
+
+// NASA ASF Sentinel-1 SLC メタデータ表示
+const slcBox = document.getElementById('insar-slc-box');
+slcBox.innerHTML = `<div style="color:#38bdf8;font-weight:bold;margin-bottom:3px;">・Sentinel-1 IW SLC (昇交/降交2軌道) + JAXA ALOS-2 PALSAR-2 (Lバンド波長23.6cm・樹冠透過)</div>` +
+  DATA.asfSlc.map(s => `<div>🛰️ <code>${s.granule}</code> ｜ 軌道: <b>${s.orbit}</b> ｜ 観測日: ${s.date}</div>`).join('');
+
+const map = L.map('map', { center: [35.296, 139.580], zoom: 14 });
+L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
+  attribution: '国土地理院 / 産総研地質調査総合センター / 国土交通省 / NASA ASF / Google Earth Engine',
+  maxZoom: 18,
+  opacity: 0.85
+}).addTo(map);
+
+// 国土地理院 0.2m 超高解像度シームレス空中写真タイルレイヤー (Zoom 18まで直接表示可能)
+const gsiOrthoTileLayer = L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/{z}/{x}/{y}.jpg', {
+  maxZoom: 18,
+  opacity: 0.85
+});
+
+const bounds = DATA.bounds;
+const overlayDefs = [
+  {
+    key: 'gsi_ortho_tile',
+    name: '[空中写真] 国土地理院 0.2mシームレス写真 (Zoom18)',
+    checked: false,
+    isTile: true,
+    sourceBadge: '🏛️ 外部取得 (国土地理院タイルAPI)',
+    badgeBg: '#2563eb',
+    origin: '国土地理院「全国最新写真（シームレス空中写真）」｜解像度：約0.2m〜0.4m (Zoom 18)',
+    desc: 'Sentinel-2衛星(10m)の約2,500倍の画素密度を持つ超高解像度オルソ空中写真です。ズームインすると個別のコンクリート擁壁、吹付法面のひび割れ、倒木、住宅と崖の距離を20cm単位で目視確認できます。'
+  },
+  {
+    key: 'curvature',
+    name: '[微細地形] 縦断曲率 Profile Curvature (崖肩凸度)',
+    checked: false,
+    opacity: 0.85,
+    sourceBadge: '🏛️ 外部5mレーザDEM ＋ 🧠 プログラム2階偏微分計算',
+    badgeBg: '#7c3aed',
+    origin: '国土地理院5m航空レーザDEM → Python (NumPy/SciPy) 2階偏微分 (∂²z/∂x², ∂²z/∂y²)',
+    desc: '最大傾斜方向の断面曲率です。<b style="color:#fb7185;">赤〜オレンジ色（正値）</b>は「崖の肩（凸型遷急線・オーバーハング気味箇所）」を示し、重力応力と乾湿風化が集中して岩塊が剥離崩落しやすい危険箇所を表します。<b style="color:#38bdf8;">水色（負値）</b>は崖下の凹型斜面です。'
+  },
+  {
+    key: 'barerock',
+    name: '[光学抽出] 露岩・吹付法面指標 (1.8mオルソ解析)',
+    checked: false,
+    opacity: 0.90,
+    sourceBadge: '🏛️ 外部1.8mオルソ画像 ＋ 🧠 プログラム光学テクスチャ計算',
+    badgeBg: '#7c3aed',
+    origin: 'zushi_gsi_ortho_2m.tif (Zoom16 約1.8m解像度) × 5m傾斜角マスク → ExG緑色超過指数・明度解析',
+    desc: '傾斜18度以上の急斜面において、植生（緑色成分）が乏しく灰白色〜褐色の地肌が露出している箇所を1.8m解像度から抽出したレイヤーです。<b style="color:#e879f9;">紫〜黄色</b>は「むき出しの凝灰岩・泥岩露頭（ロードオアシス裏・小坪海食崖等）」や「経年劣化したモルタル吹付法面」を示します。'
+  },
+  {
+    key: 'miura_geology',
+    name: '[地質構造] 産総研 三浦層群（逗子層・池子層・境界帯）',
+    checked: false,
+    opacity: 0.70,
+    sourceBadge: '🏛️ 外部公的資料 (産総研地質図幅) ＋ 🧠 空間距離モデル計算',
+    badgeBg: '#d97706',
+    origin: '産総研「5万分の1地質図幅（横須賀・鎌倉）」＆国土地理院 土地条件図 → zushi_gsj_miura_formations.tif',
+    desc: '逗子市の崖崩れメカニズムを決定づける地層区分です。<br/>・<b style="color:#a3e635;">緑色＝三浦層群 池子層</b>（凝灰質火砕岩：2020年池子2丁目事故のように無降雨でも乾湿・凍結で剥離崩落）<br/>・<b style="color:#fbbf24;">橙茶色＝三浦層群 逗子層</b>（泥岩砂岩互層：水を含むと膨潤し乾くと割れるスレーキング風化が激しく豪雨で崩壊）<br/>・<b style="color:#f472b6;">ピンク色＝池子層/逗子層 地層境界破砕帯</b>（境界から85m以内。久木トンネルやアザリエ団地等の崩落が集中する構造弱線帯）'
+  },
+  {
+    key: 'insar_creep',
+    name: '[衛星SAR] Sentinel-1 多軌道散乱変化・擾乱指数',
+    checked: false,
+    opacity: 0.85,
+    sourceBadge: '🛰️ GEE取得 (Sentinel-1 2軌道SAR) ＋ 🧠 プログラム方位合成計算',
+    badgeBg: '#0284c7',
+    origin: 'ESA Sentinel-1 CバンドSAR (昇交軌道ASCENDING × 降交軌道DESCENDING + 時系列散乱標準偏差)',
+    desc: '東向き斜面と西向き斜面のレーダー死角（レイオーバー）を解消するため、西→東照射(昇交軌道)と東→西照射(降交軌道)の長期変化(2019-2026)を斜面方位に応じて最適合成し、位相コヒーレンス低下（表面擾乱）と統合した指標です。<b style="color:#fb7185;">赤〜橙色</b>は微小な法面変位・土塊移動・表面擾乱が疑われる斜面です。'
+  },
+  {
+    key: 'alos2_lband',
+    name: '[衛星SAR] ALOS-2 PALSAR-2 (Lバンド) 散乱変化',
+    checked: false,
+    opacity: 0.80,
+    sourceBadge: '🛰️ GEE取得 (JAXA だいち2号 ALOS-2 PALSAR-2)',
+    badgeBg: '#059669',
+    origin: 'JAXA ALOS-2 PALSAR-2 LバンドSAR (波長23.6cm・HH/HV偏波経年差分 2019-2025)',
+    desc: '逗子市の共同研究でも注目される<b>波長23.6cmのLバンドマイクロ波</b>による解析です。Cバンドと異なり<b>樹木の葉や枝を透過して地面まで届く</b>ため、山林が生い茂った谷戸斜面の下で起きている地表の粗度変化・含水変化・土砂移動（<b style="color:#f87171;">黄〜赤色</b>）を捉えます。'
+  },
+  {
+    key: 'hillshade',
+    name: '1. 5m陰影起伏図 (Hillshade)',
+    checked: true,
+    opacity: 0.45,
+    sourceBadge: '🏛️ 外部取得 (国土地理院5m DEM) ＋ 🧠 プログラム計算',
+    badgeBg: '#475569',
+    origin: '国土地理院 基盤地図情報 5mメッシュ航空レーザDEM (zushi_gsi_dem_5m.tif)',
+    desc: '5mメッシュの航空レーザ標高データに対し、北西方向（方位角315度・高度角45度）から仮想太陽光を当てて計算した立体陰影図です。樹木の下にある純粋な地面の谷戸地形・尾根・急崖の連なりを立体的に把握できます。'
+  },
+  {
+    key: 's2_rgb',
+    name: '2. Sentinel-2 自然色画像 (10m)',
+    checked: false,
+    opacity: 0.9,
+    sourceBadge: '🛰️ GEE取得 (雲除去中央値合成)',
+    badgeBg: '#059669',
+    origin: 'ESA Copernicus Sentinel-2 SR (B4赤・B3緑・B2青, 10m解像度, 直近1年Median合成)',
+    desc: 'Google Earth Engine上でSCL雲マスクにより雲や影を自動除去し、直近1年間の晴天時ピクセルの中央値（Median）を合成した10m解像度のトゥルーカラー衛星画像です。'
+  },
+  {
+    key: 'slope',
+    name: '3. 傾斜角 (15〜45度+)',
+    checked: false,
+    opacity: 0.8,
+    sourceBadge: '🏛️ 外部5m DEM ＋ 🧠 プログラム勾配計算',
+    badgeBg: '#7c3aed',
+    origin: '国土地理院 5mレーザDEM → np.gradient 1階偏微分による傾斜角算出',
+    desc: '5mメッシュ標高の東西・南北勾配から算出した斜面の傾き（度）です。<b style="color:#fde047;">黄色(15〜25度)</b>→<b style="color:#f97316;">橙色(30度前後：急傾斜地指定基準)</b>→<b style="color:#dc2626;">赤〜暗赤色(40度以上の危険急崖)</b>で表示します。'
+  },
+  {
+    key: 'tpi',
+    name: '4. 微地形凹凸 TPI (赤=凸型遷急線)',
+    checked: false,
+    opacity: 0.8,
+    sourceBadge: '🏛️ 外部5m DEM ＋ 🧠 プログラム移動窓計算',
+    badgeBg: '#7c3aed',
+    origin: '国土地理院 5mレーザDEM → 中心標高と周囲35m×35m (7×7窓) 平均標高の差分',
+    desc: 'Topographic Position Index（地形位置指数）です。<br/>・<b style="color:#ef4444;">赤色（正値）＝周囲より突き出た凸型斜面・崖肩（遷急線）</b>：風化・剥離が起きやすい箇所。<br/>・<b style="color:#3b82f6;">青色（負値）＝周囲より窪んだ凹型斜面・谷筋</b>：豪雨時に雨水・地下水が集中する集水地形。'
+  },
+  {
+    key: 'mswing',
+    name: '5. 季節間乾湿ストレス ΔNDMI',
+    checked: false,
+    opacity: 0.8,
+    sourceBadge: '🛰️ GEE取得 (Sentinel-2 短波長赤外解析)',
+    badgeBg: '#059669',
+    origin: 'GEE Sentinel-2 NDMI = (B8-B11)/(B8+B11) の秋雨湿潤期(9-11月)と冬季乾燥期(1-2月)の差',
+    desc: '三浦層群（特に逗子層の泥岩や池子層の凝灰岩）が最も脆くなる原因である<b>「湿潤期の吸水膨張と冬季乾燥期の収縮（乾湿風化・スレーキング）」の激しさ</b>を衛星から数値化した指標です。<b style="color:#f97316;">橙〜赤色</b>ほど季節間の水分変動ストレスが大きい斜面です。'
+  },
+  {
+    key: 'dndvi',
+    name: '6. 災害前後植生変化 ΔNDVI',
+    checked: false,
+    opacity: 0.8,
+    sourceBadge: '🛰️ GEE取得 (Sentinel-2 2時期差分)',
+    badgeBg: '#059669',
+    origin: 'GEE Sentinel-2 NDVI (2020年崩落後 − 2018-2019年崩落前 の差分)',
+    desc: '2019年台風15・19号および2020年の一連の崖崩れ前後での植生活性度（NDVI）の変化量です。<b style="color:#ef4444;">赤色（負値）</b>は崖崩れや倒木・伐採によって植生が失われ地肌が露出した箇所、<b style="color:#22c55e;">緑色（正値）</b>は植生が回復・繁茂した箇所を示します。'
+  },
+  {
+    key: 'hazard_zones',
+    name: '7. 国交省 土砂災害警戒区域 (黄/赤ゾーン)',
+    checked: true,
+    opacity: 0.55,
+    sourceBadge: '🏛️ 外部取得 (国土交通省ハザードマップ公式タイル)',
+    badgeBg: '#2563eb',
+    origin: '国交省 重ねるハザードマップ「急傾斜地の崩壊 警戒区域」(05_kyukeishakeikaikuiki)',
+    desc: '土砂災害防止法に基づき神奈川県・国交省が指定した公的ハザードマップです。<br/>・<b style="color:#fde047;">黄色＝土砂災害警戒区域（イエローゾーン）</b>：災害時に生命・身体に危害が生じる恐れがある区域。<br/>・<b style="color:#ef4444;">赤色＝土砂災害特別警戒区域（レッドゾーン）</b>：建築物に損壊が生じ著しい危害が生じる恐れがある区域。'
+  },
+  {
+    key: 'prob',
+    name: '8. 【AIアンサンブル】相対リスクスコア (0-100)',
+    checked: true,
+    opacity: 0.65,
+    sourceBadge: '🧠 プログラムAI推論 (RF + GTB アンサンブル機械学習)',
+    badgeBg: '#dc2626',
+    origin: 'Random Forest (100本) ＋ Gradient Boosting (100本) × 全16特徴量 (5mメッシュ推論)',
+    desc: 'GEE衛星データ・5mレーザ微地形・曲率・露岩指標・産総研地質・衛星SARの全16特徴量を入力し、既往災害地点および土砂災害特別警戒区域の特徴を空間ブロック分割で学習した<b>AIアンサンブル相対リスクスコア（0〜100）</b>です（※物理的な崩壊発生確率ではなく、斜面間の相対的な危険度適合スコアを示します）。'
+  },
+  {
+    key: 'highrisk',
+    name: '9. 【最警戒抽出】相対リスクスコア 70以上 (#ff0055)',
+    checked: false,
+    opacity: 0.95,
+    sourceBadge: '🧠 プログラム計算 (高スコアピクセル抽出)',
+    badgeBg: '#dc2626',
+    origin: 'レイヤー8（AI相対リスクスコア）>= 70.0 の5mピクセル抽出マスク',
+    desc: 'AIアンサンブル相対リスクスコアが<b>70以上</b>と判定された高リスク斜面のみを鮮やかなマゼンタ赤（#ff0055）でハイライト表示します。優先的に現地巡視・点検を行うべきホットスポットです。'
+  },
+  {
+    key: 'hidden_risk',
+    name: '10. 【重要】警戒区域外のAI高リスク崖 (水色)',
+    checked: true,
+    opacity: 0.95,
+    sourceBadge: '🏛️ 国交省区域 × 🧠 AI推論 クロスギャップ解析',
+    badgeBg: '#0d9488',
+    origin: '条件：[国交省指定区域外 (hazard_zone == 0)] かつ [AI相対リスクスコア >= 70]',
+    desc: '<b>公的ハザードマップ（イエロー/レッドゾーン）に指定されていないにもかかわらず、AI相対リスクスコアが70以上と判定された「区域外高リスク斜面」</b>をシアン水色で浮き彫りにしたレイヤーです。指定基準（高さ5m以上・人家隣接等）の隙間にある道路沿い法面や小規模急崖の死角を可視化します。'
+  }
+];
+
+const activeOverlays = {};
+const layerControlsDiv = document.getElementById('layer-controls');
+const tooltipEl = document.getElementById('layer-tooltip');
+
+overlayDefs.forEach(def => {
+  let ov;
+  if (def.isTile) {
+    ov = gsiOrthoTileLayer;
+  } else {
+    ov = L.imageOverlay(DATA.layers[def.key], bounds, { opacity: def.opacity });
+  }
+  if (def.checked) ov.addTo(map);
+  activeOverlays[def.key] = ov;
+
+  const row = document.createElement('div');
+  row.className = 'layer-item';
+  const styleStr = def.name.startsWith('[') ? 'color:#fde047;font-weight:bold;' : '';
+  row.innerHTML = `<label style="${styleStr}"><input type="checkbox" data-key="${def.key}" ${def.checked ? 'checked' : ''} /> <span>${def.name}</span></label><span class="info-icon">?</span>`;
+  row.querySelector('input').addEventListener('change', e => {
+    if (e.target.checked) activeOverlays[def.key].addTo(map);
+    else map.removeLayer(activeOverlays[def.key]);
+  });
+
+  row.addEventListener('mouseenter', e => {
+    tooltipEl.innerHTML = `
+      <div class="tt-title">${def.name}</div>
+      <div class="tt-badge" style="background:${def.badgeBg};color:#fff;">${def.sourceBadge}</div>
+      <div class="tt-meta"><b>【データソース・計算元】</b><br/>${def.origin}</div>
+      <div class="tt-desc">${def.desc}</div>
+    `;
+    tooltipEl.style.display = 'block';
+    const rect = row.getBoundingClientRect();
+    const topPos = Math.min(window.innerHeight - tooltipEl.offsetHeight - 12, Math.max(12, rect.top - 10));
+    tooltipEl.style.left = (rect.right + 14) + 'px';
+    tooltipEl.style.top = topPos + 'px';
+  });
+
+  row.addEventListener('mouseleave', () => {
+    tooltipEl.style.display = 'none';
+  });
+
+  layerControlsDiv.appendChild(row);
+});
+
+document.getElementById('opacity-slider').addEventListener('input', e => {
+  const v = Number(e.target.value) / 100;
+  document.getElementById('opacity-val').textContent = e.target.value + '%';
+  activeOverlays['prob'].setOpacity(v);
+});
+
+// 過去の実災害マーカー（黄色枠の赤丸ピン）とリスト構築
+const histListDiv = document.getElementById('hist-list');
+DATA.historicalEvents.forEach(ev => {
+  const histMarker = L.circleMarker([ev.lat, ev.lon], {
+    radius: 9,
+    color: '#fde047',
+    weight: 3,
+    fillColor: '#dc2626',
+    fillOpacity: 1.0
+  }).addTo(map);
+
+  histMarker.bindPopup(`
+    <div style="font-size:12px; max-width:300px;">
+      <b style="color:#dc2626;">💥 [実災害] ${ev.title}</b><br/>
+      <b>発生日:</b> ${ev.date} ｜ <b>崩落規模:</b> 約${ev.volume_m3} m³ (約${ev.weight_ton} t)<br/>
+      <b>産総研地層区分:</b> ${ev.gsj_formation} (境界距離: ${ev.boundary_dist_m}m)<br/>
+      <b>InSAR変位擾乱指数:</b> ${ev.insar_max_creep_idx} ｜ <b>縦断曲率:</b> ${ev.site_max_profile_curv}<br/>
+      <b>未学習検証リスクスコア:</b> <span style="color:#dc2626;font-weight:bold;">${ev.ai_max_prob_pct}</span> (${ev.in_statutory_hazard_zone})
+    </div>
+  `);
+
+  histMarker.on('click', () => showHistoricalEventKartu(ev));
+
+  const item = document.createElement('div');
+  item.className = 'hist-item';
+  item.innerHTML = `
+    <div class="hist-title">💥 ${ev.date}｜${ev.title}</div>
+    <div class="hist-meta">${ev.gsj_formation} ｜ InSAR: <b>${ev.insar_max_creep_idx}</b> ｜ リスクスコア: <b style="color:#f87171;">${ev.ai_max_prob_pct}</b></div>
+  `;
+  item.addEventListener('click', () => {
+    map.setView([ev.lat, ev.lon], 17);
+    histMarker.openPopup();
+    showHistoricalEventKartu(ev);
+    updateTsChart(ev.district);
+  });
+  histListDiv.appendChild(item);
+});
+
+let addrReqSeq = 0;
+let addrAbortCtrl = null;
+
+function showHistoricalEventKartu(ev) {
+  addrReqSeq++;
+  if (addrAbortCtrl) {
+    addrAbortCtrl.abort();
+    addrAbortCtrl = null;
+  }
+  document.getElementById('kartu-prob-badge').textContent = `未学習検証スコア: ${ev.ai_max_prob_pct}`;
+  document.getElementById('kartu-details').innerHTML = `
+    <div style="background:#1e293b; padding:8px; border-radius:6px; border-left:3px solid #fde047; margin-bottom:6px;">
+      <div style="font-weight:bold; color:#fde047;">💥 ${ev.title} (${ev.date})</div>
+      <div><b>【国土地理院 照合住所】</b> ${ev.address} (北緯 ${ev.lat.toFixed(5)}, 東経 ${ev.lon.toFixed(5)})</div>
+      <div><b>【定量データ】</b> 崩落土量: <b>約${ev.volume_m3} m³ (約${ev.weight_ton} トン)</b> ／ 規模: ${ev.dimensions}</div>
+      <div><b>【気象・誘因】</b> ${ev.trigger}</div>
+      <div><b>【地質・崩壊メカニズム(定性)】</b> ${ev.geology_mechanism}</div>
+      <div><b>【被害・社会的影響】</b> ${ev.damage_impact}</div>
+      <div style="font-size:10px; color:#94a3b8;">出典: ${ev.source}</div>
+    </div>
+    <div style="color:#f87171; font-weight:bold;">・現場周辺5mメッシュ 相対リスクスコア(未学習LOEO検証): 最大 ${ev.ai_max_prob_pct} (斜面平均: ${ev.ai_mean_prob_pct})</div>
+    <div style="color:#fde047;">・【地質区分】<b>${ev.gsj_formation}</b> (池子層/逗子層境界から <b>${ev.boundary_dist_m} m</b>)</div>
+    <div style="color:#38bdf8;">・【衛星SAR】多軌道SAR変位擾乱指数: <b>${ev.insar_max_creep_idx} / 100</b></div>
+    <div>・【微細地形】最大傾斜角: <b>${ev.site_max_slope_deg}°</b> ｜ 縦断曲率: <b>${ev.site_max_profile_curv}</b> ｜ ΔNDMI: <b>${ev.site_moisture_swing}</b></div>
+    <div>・法指定区分: <b>${ev.in_statutory_hazard_zone}</b></div>
+  `;
+}
+
+// 8地区マーカー & テーブル & セレクト
+const selectEl = document.getElementById('district-select');
+const tbody = document.querySelector('#district-table tbody');
+const sortSelectEl = document.getElementById('district-sort-select');
+const sortHeaders = document.querySelectorAll('#district-table th.sortable');
+const RANK_WEIGHT = { S: 3, A: 2, B: 1 };
+let currentSortKey = 'id';
+let currentSortDir = 'asc';
+
+DATA.districts.forEach(d => {
+  const opt = document.createElement('option');
+  opt.value = d['地区名'];
+  opt.textContent = d['調査対象エリア'];
+  selectEl.appendChild(opt);
+
+  const marker = L.circleMarker([d['中心緯度'], d['中心経度']], {
+    radius: 6,
+    color: '#ffffff',
+    weight: 1.5,
+    fillColor: '#3b82f6',
+    fillOpacity: 0.85
+  }).addTo(map);
+  marker.bindPopup(`<b>${d['調査対象エリア']}</b><br/>スコア70以上面積: ${d['警戒斜面面積_スコア70以上(ha)']} ha<br/>区域外の高リスク面積: ${d['区域外_隠れAI高リスク面積(ha)']} ha<br/>InSAR変位擾乱最大: ${d['InSAR変位擾乱指数_最大']}`);
+  marker.on('click', () => selectDistrict(d['地区名']));
+});
+
+function getDistrictSortVal(d, key) {
+  if (key === 'hist') return Number(d['過去の主要実災害件数']);
+  if (key === 'area70') return Number(d['警戒斜面面積_スコア70以上(ha)']);
+  if (key === 'hidden') return Number(d['区域外_隠れAI高リスク面積(ha)']);
+  if (key === 'insar') return Number(d['InSAR変位擾乱指数_最大']);
+  if (key === 'rank') {
+    const r = d['推奨対応ランク'].split(' ')[0];
+    return (RANK_WEIGHT[r] || 0) * 1000 + Number(d['警戒斜面面積_スコア70以上(ha)']);
+  }
+  return Number(d['地区番号']);
+}
+
+function renderDistrictTable() {
+  tbody.innerHTML = '';
+  const sorted = [...DATA.districts].sort((a, b) => {
+    const va = getDistrictSortVal(a, currentSortKey);
+    const vb = getDistrictSortVal(b, currentSortKey);
+    if (va === vb) return Number(a['地区番号']) - Number(b['地区番号']);
+    return currentSortDir === 'asc' ? va - vb : vb - va;
+  });
+
+  sorted.forEach(d => {
+    const tr = document.createElement('tr');
+    const rankCls = d['推奨対応ランク'].startsWith('S') ? 'rank-S' : (d['推奨対応ランク'].startsWith('A') ? 'rank-A' : 'rank-B');
+    tr.innerHTML = `
+      <td><b>${d['地区名']}</b></td>
+      <td>${d['過去の主要実災害件数']}件</td>
+      <td>${d['警戒斜面面積_スコア70以上(ha)']} ha</td>
+      <td style="color:#00f5d4;font-weight:bold;">${d['区域外_隠れAI高リスク面積(ha)']} ha</td>
+      <td style="color:#fde047;">${d['InSAR変位擾乱指数_最大']}</td>
+      <td class="${rankCls}">${d['推奨対応ランク'].split(' ')[0]}</td>
+    `;
+    tr.addEventListener('click', () => selectDistrict(d['地区名']));
+    tbody.appendChild(tr);
+  });
+
+  sortHeaders.forEach(th => {
+    const k = th.dataset.sort;
+    const ind = th.querySelector('.sort-ind');
+    if (k === currentSortKey) {
+      th.classList.add('active');
+      if (ind) ind.textContent = currentSortDir === 'asc' ? '▲' : '▼';
+    } else {
+      th.classList.remove('active');
+      if (ind) ind.textContent = '↕';
+    }
+  });
+
+  const matchVal = `${currentSortKey}:${currentSortDir}`;
+  if ([...sortSelectEl.options].some(o => o.value === matchVal)) {
+    sortSelectEl.value = matchVal;
+  }
+}
+
+sortHeaders.forEach(th => {
+  th.addEventListener('click', () => {
+    const k = th.dataset.sort;
+    if (currentSortKey === k) {
+      currentSortDir = currentSortDir === 'desc' ? 'asc' : 'desc';
+    } else {
+      currentSortKey = k;
+      currentSortDir = k === 'id' ? 'asc' : 'desc';
+    }
+    renderDistrictTable();
+  });
+});
+
+sortSelectEl.addEventListener('change', e => {
+  const [k, dir] = e.target.value.split(':');
+  currentSortKey = k;
+  currentSortDir = dir;
+  renderDistrictTable();
+});
+
+renderDistrictTable();
+
+let tsChart = null;
+function updateTsChart(districtName) {
+  const series = DATA.timeSeries[districtName] || DATA.timeSeries['池子'] || [];
+  const ctx = document.getElementById('ts-chart').getContext('2d');
+  if (tsChart) tsChart.destroy();
+  tsChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: series.map(s => s.period),
+      datasets: [
+        { label: `NDVI (${districtName})`, data: series.map(s => s.ndvi), borderColor: '#22c55e', tension: 0.25, pointRadius: 2 },
+        { label: `NDMI (${districtName})`, data: series.map(s => s.ndmi), borderColor: '#38bdf8', tension: 0.25, pointRadius: 2 }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } },
+      scales: {
+        x: { ticks: { color: '#94a3b8', font: { size: 9 } } },
+        y: { ticks: { color: '#94a3b8', font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function selectDistrict(name) {
+  selectEl.value = name;
+  if (name === 'all') {
+    map.setView([35.296, 139.580], 14);
+    document.getElementById('kpi-area').textContent = DATA.globalAreaByThresh['70'].ha + ' ha';
+    document.getElementById('kpi-hidden').textContent = DATA.totalHiddenHa + ' ha';
+    updateTsChart('池子');
+    return;
+  }
+  const d = DATA.districts.find(x => x['地区名'] === name);
+  if (d) {
+    map.setView([d['中心緯度'], d['中心経度']], 16);
+    document.getElementById('kpi-area').textContent = d['警戒斜面面積_スコア70以上(ha)'] + ' ha';
+    document.getElementById('kpi-hidden').textContent = d['区域外_隠れAI高リスク面積(ha)'] + ' ha';
+    updateTsChart(name);
+  }
+}
+
+selectEl.addEventListener('change', e => selectDistrict(e.target.value));
+updateTsChart('池子');
+showHistoricalEventKartu(DATA.historicalEvents[0]);
+
+new Chart(document.getElementById('imp-chart').getContext('2d'), {
+  type: 'bar',
+  data: {
+    labels: DATA.importances.map(x => x.factor),
+    datasets: [{ label: '寄与度 (%)', data: DATA.importances.map(x => x.importance), backgroundColor: '#f97316' }]
+  },
+  options: {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: '#94a3b8', font: { size: 10 } } },
+      y: { ticks: { color: '#cbd5e1', font: { size: 9.5 } } }
+    }
+  }
+});
+
+new Chart(document.getElementById('roc-chart').getContext('2d'), {
+  type: 'scatter',
+  data: {
+    datasets: [{
+      label: `ROC (AUC = ${DATA.auc})`,
+      data: DATA.roc,
+      showLine: true,
+      borderColor: '#38bdf8',
+      backgroundColor: '#38bdf8',
+      pointRadius: 2
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 10 } } } },
+    scales: {
+      x: { min: 0, max: 1, title: { display: true, text: '偽陽性率 (FPR)', color: '#94a3b8', font: { size: 10 } }, ticks: { color: '#94a3b8' } },
+      y: { min: 0, max: 1, title: { display: true, text: '真陽性率 (TPR)', color: '#94a3b8', font: { size: 10 } }, ticks: { color: '#94a3b8' } }
+    }
+  }
+});
+
+let clickMarker = null;
+map.on('click', e => {
+  const lat = e.latlng.lat;
+  const lon = e.latlng.lng;
+  const g = DATA.grid;
+  const r = Math.floor((g.north - lat) / (g.north - g.south) * g.rows);
+  const c = Math.floor((lon - g.west) / (g.east - g.west) * g.cols);
+  if (r < 0 || r >= g.rows || c < 0 || c >= g.cols) return;
+
+  if (clickMarker) map.removeLayer(clickMarker);
+  clickMarker = L.circleMarker([lat, lon], { radius: 6, color: '#00f5d4', weight: 2, fillColor: '#ef4444', fillOpacity: 1 }).addTo(map);
+
+  const prob = g.prob[r][c];
+  const rf = g.rf[r][c];
+  const gtb = g.gtb[r][c];
+  const elev = g.elev[r][c];
+  const slope = g.slope[r][c];
+  const tpi = g.tpi[r][c];
+  const twi = g.twi[r][c];
+  const curv = g.curv[r][c];
+  const pcurv = g.pcurv[r][c];
+  const rock = g.rock[r][c];
+  const form = g.form[r][c];
+  const bdist = g.bdist[r][c];
+  const insar = g.insar[r][c];
+  const lband = g.lband[r][c];
+  const ndvi = g.ndvi[r][c];
+  const mswing = g.mswing[r][c];
+  const haz = g.haz[r][c];
+  const hazStr = haz === 2 ? '🔴 土砂災害特別警戒区域 (レッドゾーン)' : (haz === 1 ? '🟡 土砂災害警戒区域 (イエローゾーン)' : '⚪ 指定区域外 (未指定エリア)');
+  const formStr = FORMATION_NAMES[form] || '三浦層群';
+  const tpiType = tpi > 0.3 ? '凸型遷急線（乾湿風化・剥離注意）' : (tpi < -0.3 ? '凹型集水地形（豪雨崩壊注意）' : '平行〜緩変化斜面');
+
+  document.getElementById('kartu-prob-badge').textContent = `相対リスクスコア: ${prob.toFixed(1)}`;
+  document.getElementById('kartu-details').innerHTML = `
+    <div><b>座標:</b> 北緯 ${lat.toFixed(5)}, 東経 ${lon.toFixed(5)} ｜ <b>住所:</b> <span id="click-addr">国土地理院APIで逆引き中...</span></div>
+    <div><b>法指定状況:</b> ${hazStr}</div>
+    <div style="color:#f87171; font-weight:bold;">・AIアンサンブル相対リスクスコア: ${prob.toFixed(1)} / 100 (RF: ${rf.toFixed(1)} / GTB: ${gtb.toFixed(1)})</div>
+    <div style="color:#fde047;">・<b>【地質区分】</b> ${formStr} (地層境界距離: <b>${bdist} m</b>)</div>
+    <div style="color:#38bdf8;">・<b>【衛星SAR】</b> 多軌道変位擾乱指数: <b>${insar.toFixed(1)} / 100</b> ｜ Lバンド樹冠透過変化: <b>${lband.toFixed(2)} dB</b></div>
+    <div style="color:#e879f9;">・<b>【微細地形・光学】</b> 縦断曲率: <b>${curv.toFixed(2)}</b> ｜ 平面曲率: <b>${pcurv.toFixed(2)}</b> ｜ 露岩・吹付法面指数: <b>${rock.toFixed(1)}</b></div>
+    <div>・標高: <b>${elev.toFixed(1)} m</b> ｜ 傾斜角: <b>${slope.toFixed(1)} 度</b> ｜ 湿潤指数TWI: <b>${twi.toFixed(2)}</b> ｜ ${tpiType}</div>
+    <div>・直近植生 NDVI: <b>${ndvi.toFixed(2)}</b> ｜ 季節間乾湿ストレス ΔNDMI: <b>${mswing.toFixed(3)}</b></div>
+  `;
+  const reqId = ++addrReqSeq;
+  if (addrAbortCtrl) addrAbortCtrl.abort();
+  addrAbortCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+
+  fetch(
+    `https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat}&lon=${lon}`,
+    addrAbortCtrl ? { signal: addrAbortCtrl.signal } : undefined
+  )
+    .then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    })
+    .then(d => {
+      if (reqId !== addrReqSeq) return;
+      const lv = d && d.results && d.results.lv01Nm ? '神奈川県逗子市' + d.results.lv01Nm : '住所取得不可';
+      const el = document.getElementById('click-addr');
+      if (el) el.textContent = lv;
+    })
+    .catch(err => {
+      if (reqId !== addrReqSeq || (err && err.name === 'AbortError')) return;
+      const el = document.getElementById('click-addr');
+      if (el) el.textContent = '住所取得失敗（通信エラー）';
+    });
+});
+window.addEventListener('resize', () => map.invalidateSize());
+setTimeout(() => map.invalidateSize(), 150);
+</script>
+</body>
+</html>
