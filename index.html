@@ -621,9 +621,23 @@ renderDistrictTable();
 
 let tsChart = null;
 function updateTsChart(districtName) {
-  const series = DATA.timeSeries[districtName] || DATA.timeSeries['池子'] || [];
-  const ctx = document.getElementById('ts-chart').getContext('2d');
+  const series = DATA.timeSeries && DATA.timeSeries[districtName];
+  const canvas = document.getElementById('ts-chart');
+  let status = document.getElementById('ts-status');
+  if (!status) {
+    status = document.createElement('p');
+    status.id = 'ts-status';
+    status.setAttribute('role', 'status');
+    status.style.cssText = 'font-size:12px;color:#fde047;line-height:1.5;';
+    canvas.parentElement.appendChild(status);
+  }
   if (tsChart) tsChart.destroy();
+  tsChart = null;
+  const available = Array.isArray(series) && series.length > 0 && series.every(s => Number.isFinite(s.ndvi) && Number.isFinite(s.ndmi));
+  status.textContent = available ? '' : `${districtName}の時系列データがありません。`;
+  canvas.hidden = !available;
+  if (!available) return;
+  const ctx = canvas.getContext('2d');
   tsChart = new Chart(ctx, {
     type: 'line',
     data: {
