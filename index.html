@@ -124,13 +124,13 @@
 
   <div class="card">
     <h2>
-      <span>③ 全8地区 AIリスク・InSAR・区域外危険一覧</span>
+      <span>③ 全8地区 相対スコア・SAR指標・区域外候補一覧</span>
       <select id="district-sort-select" style="width:auto; padding:2px 6px; font-size:10.5px;">
         <option value="id:asc">並び替え: 地区順</option>
         <option value="area70:desc">警戒面積 (大きい順)</option>
         <option value="hidden:desc">区域外危険 (大きい順)</option>
         <option value="hist:desc">実災害件数 (多い順)</option>
-        <option value="insar:desc">InSAR最大 (高い順)</option>
+        <option value="insar:desc">SAR指標最大 (高い順)</option>
         <option value="rank:desc">判定ランク (S→B)</option>
       </select>
     </h2>
@@ -142,7 +142,7 @@
             <th class="sortable" data-sort="hist">実災害 <span class="sort-ind">↕</span></th>
             <th class="sortable" data-sort="area70">警戒面積 <span class="sort-ind">↕</span></th>
             <th class="sortable" data-sort="hidden">区域外危険 <span class="sort-ind">↕</span></th>
-            <th class="sortable" data-sort="insar">InSAR最大 <span class="sort-ind">↕</span></th>
+            <th class="sortable" data-sort="insar">SAR指標最大 <span class="sort-ind">↕</span></th>
             <th class="sortable" data-sort="rank">判定 <span class="sort-ind">↕</span></th>
           </tr>
         </thead>
@@ -160,12 +160,12 @@
   <div class="card">
     <h2>📍 クリック地点 / 実災害現場の精密斜面カルテ <span class="badge" id="kartu-prob-badge">地図/事案をクリック</span></h2>
     <div id="kartu-details" style="font-size:11px; line-height:1.52; color:#cbd5e1;">
-      左側の「💥 過去の実災害アーカイブ」または地図上の任意の崖をクリックすると、実災害の定量データ・産総研地層区分（逗子層/池子層）・InSAR多軌道変位指標・極微細曲率・AI診断を表示します。
+      左側の「💥 過去の実災害アーカイブ」または地図上の任意の崖をクリックすると、実災害の定量データ・産総研地層区分（逗子層/池子層）・SAR多軌道散乱変化指標・極微細曲率・AI診断を表示します。
     </div>
   </div>
 
   <div class="card">
-    <h2>🛰️ NASA ASF Sentinel-1 SLC 干渉SAR観測メタデータ <span class="badge badge-purple">Cバンド + Lバンド</span></h2>
+    <h2>🛰️ NASA ASF Sentinel-1 SLC 観測一覧（位相解析未実施） <span class="badge badge-purple">Cバンド</span></h2>
     <div id="insar-slc-box" style="font-size:10.5px; color:#cbd5e1; line-height:1.45;"></div>
   </div>
 
@@ -221,8 +221,14 @@ document.getElementById('kpi-hidden').textContent = DATA.totalHiddenHa + ' ha';
 
 // NASA ASF Sentinel-1 SLC メタデータ表示
 const slcBox = document.getElementById('insar-slc-box');
-slcBox.innerHTML = `<div style="color:#38bdf8;font-weight:bold;margin-bottom:3px;">・Sentinel-1 IW SLC (昇交/降交2軌道) + JAXA ALOS-2 PALSAR-2 (Lバンド波長23.6cm・樹冠透過)</div>` +
-  DATA.asfSlc.map(s => `<div>🛰️ <code>${s.granule}</code> ｜ 軌道: <b>${s.orbit}</b> ｜ 観測日: ${s.date}</div>`).join('');
+const slcSource = document.createElement('p');
+slcSource.textContent = DATA.asfSlcSource || '履歴から復元（出典未再確認・観測一覧のみ）';
+slcBox.appendChild(slcSource);
+DATA.asfSlc.forEach(s => {
+  const row = document.createElement('div');
+  row.textContent = `${s.granule} ｜ 軌道: ${s.orbit} ｜ 観測日: ${s.date}`;
+  slcBox.appendChild(row);
+});
 
 const map = L.map('map', { center: [35.296, 139.580], zoom: 14 });
 L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png', {
@@ -277,7 +283,7 @@ const overlayDefs = [
     sourceBadge: '🏛️ 外部公的資料 (産総研地質図幅) ＋ 🧠 空間距離モデル計算',
     badgeBg: '#d97706',
     origin: '産総研「5万分の1地質図幅（横須賀・鎌倉）」＆国土地理院 土地条件図 → zushi_gsj_miura_formations.tif',
-    desc: '逗子市の崖崩れメカニズムを決定づける地層区分です。<br/>・<b style="color:#a3e635;">緑色＝三浦層群 池子層</b>（凝灰質火砕岩：2020年池子2丁目事故のように無降雨でも乾湿・凍結で剥離崩落）<br/>・<b style="color:#fbbf24;">橙茶色＝三浦層群 逗子層</b>（泥岩砂岩互層：水を含むと膨潤し乾くと割れるスレーキング風化が激しく豪雨で崩壊）<br/>・<b style="color:#f472b6;">ピンク色＝池子層/逗子層 地層境界破砕帯</b>（境界から85m以内。久木トンネルやアザリエ団地等の崩落が集中する構造弱線帯）'
+    desc: '逗子市の地形条件と手置きの境界線から推定した近似区分です。公的な地質境界の位置や現地の地層を確定するものではありません。<br/>・<b style="color:#a3e635;">緑色＝三浦層群 池子層</b>（凝灰質火砕岩：2020年池子2丁目事故のように無降雨でも乾湿・凍結で剥離崩落）<br/>・<b style="color:#fbbf24;">橙茶色＝三浦層群 逗子層</b>（泥岩砂岩互層：水を含むと膨潤し乾くと割れるスレーキング風化が激しく豪雨で崩壊）<br/>・<b style="color:#f472b6;">ピンク色＝池子層/逗子層 地層境界破砕帯</b>（境界から85m以内。久木トンネルやアザリエ団地等の崩落が集中する構造弱線帯）'
   },
   {
     key: 'insar_creep',
@@ -287,7 +293,7 @@ const overlayDefs = [
     sourceBadge: '🛰️ GEE取得 (Sentinel-1 2軌道SAR) ＋ 🧠 プログラム方位合成計算',
     badgeBg: '#0284c7',
     origin: 'ESA Sentinel-1 CバンドSAR (昇交軌道ASCENDING × 降交軌道DESCENDING + 時系列散乱標準偏差)',
-    desc: '東向き斜面と西向き斜面のレーダー死角（レイオーバー）を解消するため、西→東照射(昇交軌道)と東→西照射(降交軌道)の長期変化(2019-2026)を斜面方位に応じて最適合成し、位相コヒーレンス低下（表面擾乱）と統合した指標です。<b style="color:#fb7185;">赤〜橙色</b>は微小な法面変位・土塊移動・表面擾乱が疑われる斜面です。'
+    desc: '昇交・降交軌道の後方散乱強度の長期変化を斜面方位で重み付けし、散乱強度の時系列標準偏差とLバンドの強度変化を組み合わせた試行的な指標です。<b style="color:#fb7185;">赤〜橙色</b>はこの合成指標が高い場所です。植生・水分・観測条件にも影響され、地盤変位や位相コヒーレンスを測定したものではありません。レーダーの死角を解消する処理も行っていません。'
   },
   {
     key: 'alos2_lband',
@@ -297,7 +303,7 @@ const overlayDefs = [
     sourceBadge: '🛰️ GEE取得 (JAXA だいち2号 ALOS-2 PALSAR-2)',
     badgeBg: '#059669',
     origin: 'JAXA ALOS-2 PALSAR-2 LバンドSAR (波長23.6cm・HH/HV偏波経年差分 2019-2025)',
-    desc: '逗子市の共同研究でも注目される<b>波長23.6cmのLバンドマイクロ波</b>による解析です。Cバンドと異なり<b>樹木の葉や枝を透過して地面まで届く</b>ため、山林が生い茂った谷戸斜面の下で起きている地表の粗度変化・含水変化・土砂移動（<b style="color:#f87171;">黄〜赤色</b>）を捉えます。'
+    desc: 'LバンドSARのHV後方散乱強度の期間差分です。<b style="color:#f87171;">黄〜赤色</b>は強度変化の大きい場所です。植生・水分・観測条件の影響を含むため、土砂移動や樹冠下の地盤変位を直接示すものではありません。'
   },
   {
     key: 'hillshade',
@@ -467,7 +473,7 @@ DATA.historicalEvents.forEach(ev => {
       <b style="color:#dc2626;">💥 [実災害] ${ev.title}</b><br/>
       <b>発生日:</b> ${ev.date} ｜ <b>崩落規模:</b> 約${ev.volume_m3} m³ (約${ev.weight_ton} t)<br/>
       <b>産総研地層区分:</b> ${ev.gsj_formation} (境界距離: ${ev.boundary_dist_m}m)<br/>
-      <b>InSAR変位擾乱指数:</b> ${ev.insar_max_creep_idx} ｜ <b>縦断曲率:</b> ${ev.site_max_profile_curv}<br/>
+      <b>SAR散乱変化・擾乱指数:</b> ${ev.insar_max_creep_idx} ｜ <b>縦断曲率:</b> ${ev.site_max_profile_curv}<br/>
       <b>未学習検証リスクスコア:</b> <span style="color:#dc2626;font-weight:bold;">${ev.ai_max_prob_pct}</span> (${ev.in_statutory_hazard_zone})
     </div>
   `);
@@ -478,7 +484,7 @@ DATA.historicalEvents.forEach(ev => {
   item.className = 'hist-item';
   item.innerHTML = `
     <div class="hist-title">💥 ${ev.date}｜${ev.title}</div>
-    <div class="hist-meta">${ev.gsj_formation} ｜ InSAR: <b>${ev.insar_max_creep_idx}</b> ｜ リスクスコア: <b style="color:#f87171;">${ev.ai_max_prob_pct}</b></div>
+    <div class="hist-meta">${ev.gsj_formation} ｜ SAR指標: <b>${ev.insar_max_creep_idx}</b> ｜ リスクスコア: <b style="color:#f87171;">${ev.ai_max_prob_pct}</b></div>
   `;
   item.addEventListener('click', () => {
     map.setView([ev.lat, ev.lon], 17);
@@ -511,7 +517,7 @@ function showHistoricalEventKartu(ev) {
     </div>
     <div style="color:#f87171; font-weight:bold;">・現場周辺5mメッシュ 相対リスクスコア(未学習LOEO検証): 最大 ${ev.ai_max_prob_pct} (斜面平均: ${ev.ai_mean_prob_pct})</div>
     <div style="color:#fde047;">・【地質区分】<b>${ev.gsj_formation}</b> (池子層/逗子層境界から <b>${ev.boundary_dist_m} m</b>)</div>
-    <div style="color:#38bdf8;">・【衛星SAR】多軌道SAR変位擾乱指数: <b>${ev.insar_max_creep_idx} / 100</b></div>
+    <div style="color:#38bdf8;">・【衛星SAR】多軌道SAR散乱変化・擾乱指数: <b>${ev.insar_max_creep_idx} / 100</b></div>
     <div>・【微細地形】最大傾斜角: <b>${ev.site_max_slope_deg}°</b> ｜ 縦断曲率: <b>${ev.site_max_profile_curv}</b> ｜ ΔNDMI: <b>${ev.site_moisture_swing}</b></div>
     <div>・法指定区分: <b>${ev.in_statutory_hazard_zone}</b></div>
   `;
@@ -539,7 +545,7 @@ DATA.districts.forEach(d => {
     fillColor: '#3b82f6',
     fillOpacity: 0.85
   }).addTo(map);
-  marker.bindPopup(`<b>${d['調査対象エリア']}</b><br/>スコア70以上面積: ${d['警戒斜面面積_スコア70以上(ha)']} ha<br/>区域外の高リスク面積: ${d['区域外_隠れAI高リスク面積(ha)']} ha<br/>InSAR変位擾乱最大: ${d['InSAR変位擾乱指数_最大']}`);
+  marker.bindPopup(`<b>${d['調査対象エリア']}</b><br/>スコア70以上面積: ${d['警戒斜面面積_スコア70以上(ha)']} ha<br/>区域外の高リスク面積: ${d['区域外_隠れAI高リスク面積(ha)']} ha<br/>SAR散乱変化・擾乱最大: ${d['InSAR変位擾乱指数_最大']}`);
   marker.on('click', () => selectDistrict(d['地区名']));
 });
 
@@ -729,10 +735,19 @@ map.on('click', e => {
   const g = DATA.grid;
   const r = Math.floor((g.north - lat) / (g.north - g.south) * g.rows);
   const c = Math.floor((lon - g.west) / (g.east - g.west) * g.cols);
-  if (r < 0 || r >= g.rows || c < 0 || c >= g.cols) return;
+  const inGrid = r >= 0 && r < g.rows && c >= 0 && c < g.cols;
 
   if (clickMarker) map.removeLayer(clickMarker);
   clickMarker = L.circleMarker([lat, lon], { radius: 6, color: '#00f5d4', weight: 2, fillColor: '#ef4444', fillOpacity: 1 }).addTo(map);
+
+  const valid = inGrid && (g.valid ? g.valid[r][c] : g.form[r][c] !== 0);
+  if (!valid) {
+    ++addrReqSeq;
+    if (addrAbortCtrl) addrAbortCtrl.abort();
+    document.getElementById('kartu-prob-badge').textContent = '評価なし';
+    document.getElementById('kartu-details').textContent = 'この地点は解析対象外、または観測データが不足しています。スコア・地質・法指定状況は表示しません。';
+    return;
+  }
 
   const prob = g.prob[r][c];
   const rf = g.rf[r][c];
@@ -761,7 +776,7 @@ map.on('click', e => {
     <div><b>法指定状況:</b> ${hazStr}</div>
     <div style="color:#f87171; font-weight:bold;">・AIアンサンブル相対リスクスコア: ${prob.toFixed(1)} / 100 (RF: ${rf.toFixed(1)} / GTB: ${gtb.toFixed(1)})</div>
     <div style="color:#fde047;">・<b>【地質区分】</b> ${formStr} (地層境界距離: <b>${bdist} m</b>)</div>
-    <div style="color:#38bdf8;">・<b>【衛星SAR】</b> 多軌道変位擾乱指数: <b>${insar.toFixed(1)} / 100</b> ｜ Lバンド樹冠透過変化: <b>${lband.toFixed(2)} dB</b></div>
+    <div style="color:#38bdf8;">・<b>【衛星SAR】</b> 多軌道散乱変化・擾乱指数: <b>${insar.toFixed(1)} / 100</b> ｜ Lバンド後方散乱変化: <b>${lband.toFixed(2)} dB</b></div>
     <div style="color:#e879f9;">・<b>【微細地形・光学】</b> 縦断曲率: <b>${curv.toFixed(2)}</b> ｜ 平面曲率: <b>${pcurv.toFixed(2)}</b> ｜ 露岩・吹付法面指数: <b>${rock.toFixed(1)}</b></div>
     <div>・標高: <b>${elev.toFixed(1)} m</b> ｜ 傾斜角: <b>${slope.toFixed(1)} 度</b> ｜ 湿潤指数TWI: <b>${twi.toFixed(2)}</b> ｜ ${tpiType}</div>
     <div>・直近植生 NDVI: <b>${ndvi.toFixed(2)}</b> ｜ 季節間乾湿ストレス ΔNDMI: <b>${mswing.toFixed(3)}</b></div>
